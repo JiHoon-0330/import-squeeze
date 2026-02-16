@@ -11,9 +11,6 @@ const PLATFORMS = {
   linux: {
     x64: "@import-squeeze/linux-x64",
   },
-  win32: {
-    x64: "@import-squeeze/win32-x64",
-  },
 };
 
 function getBinaryPath() {
@@ -30,8 +27,7 @@ function getBinaryPath() {
     throw new Error(`Unsupported architecture: ${platform}-${arch}`);
   }
 
-  const binaryName =
-    platform === "win32" ? "import-squeeze.exe" : "import-squeeze";
+  const binaryName = "import-squeeze";
 
   try {
     const packageDir = path.dirname(require.resolve(`${packageName}/package.json`));

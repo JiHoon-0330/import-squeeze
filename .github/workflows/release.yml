@@ -22,10 +22,6 @@ jobs:
             os: ubuntu-latest
             npm-dir: linux-x64
             binary: import-squeeze
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            npm-dir: win32-x64
-            binary: import-squeeze.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -71,13 +67,13 @@ jobs:
 
       - name: Copy binaries to npm packages
         run: |
-          for dir in darwin-arm64 linux-x64 win32-x64; do
+          for dir in darwin-arm64 linux-x64; do
             cp -r artifacts/$dir/* npm/$dir/
           done
 
       - name: Publish platform packages
         run: |
-          for dir in darwin-arm64 linux-x64 win32-x64; do
+          for dir in darwin-arm64 linux-x64; do
             cd npm/$dir
             npm publish --access public --provenance
             cd ../..
@@ -95,4 +91,3 @@ jobs:
           files: |
             artifacts/darwin-arm64/import-squeeze
             artifacts/linux-x64/import-squeeze
-            artifacts/win32-x64/import-squeeze.exe
