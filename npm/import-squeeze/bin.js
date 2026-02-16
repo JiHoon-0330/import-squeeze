@@ -7,7 +7,6 @@ const os = require("os");
 const PLATFORMS = {
   darwin: {
     arm64: "@import-squeeze/darwin-arm64",
-    x64: "@import-squeeze/darwin-x64",
   },
   linux: {
     x64: "@import-squeeze/linux-x64",
