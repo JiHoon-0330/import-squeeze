@@ -1,0 +1,9 @@
+{
+  "name": "@import-squeeze/darwin-x64",
+  "version": "0.1.0",
+  "description": "import-squeeze binary for macOS Intel",
+  "license": "MIT",
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["import-squeeze"]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@import-squeeze/darwin-arm64",
+  "version": "0.1.0",
+  "description": "import-squeeze binary for macOS Apple Silicon",
+  "license": "MIT",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["import-squeeze"]
+}
