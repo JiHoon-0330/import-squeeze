@@ -66,6 +66,7 @@ jobs:
       - name: Copy binaries to npm packages and rename for release
         run: |
           for dir in darwin-arm64 linux-x64; do
+            chmod +x artifacts/$dir/import-squeeze
             cp -r artifacts/$dir/* npm/$dir/
             cp artifacts/$dir/import-squeeze artifacts/import-squeeze-$dir
           done

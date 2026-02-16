@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const { execFileSync } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
@@ -42,6 +43,7 @@ function getBinaryPath() {
 
 try {
   const binaryPath = getBinaryPath();
+  try { fs.chmodSync(binaryPath, 0o755); } catch {}
   const result = execFileSync(binaryPath, process.argv.slice(2), {
     stdio: "inherit",
   });
