@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use glob::glob;
+use globset::{Glob, GlobSetBuilder};
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 const SUPPORTED_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
 
@@ -75,33 +76,69 @@ pub fn find_biome_config(start_dir: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Resolve glob patterns from biome config into actual file paths.
-/// Only includes files with supported extensions.
+/// Resolve file paths by walking the directory tree.
+/// Skips excluded directories entirely (never enters node_modules, .git, etc).
+/// Only returns files with supported extensions that match include patterns.
 pub fn resolve_file_paths(config: &BiomeFiles, base_dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-
+    // Build include glob set
+    let mut include_builder = GlobSetBuilder::new();
     for pattern in &config.includes {
-        // For each supported extension, expand the glob pattern
         for ext in SUPPORTED_EXTENSIONS {
-            let ext_pattern = if pattern.ends_with("**") {
+            let glob_pattern = if pattern.ends_with("**") {
                 format!("{}/*.{}", pattern, ext)
-            } else if pattern.ends_with('/') || pattern.ends_with("**") {
-                format!("{}*.{}", pattern, ext)
+            } else if pattern.ends_with('/') {
+                format!("{}**/*.{}", pattern, ext)
             } else {
-                // If pattern already has an extension or is specific, use as-is
+                // Pattern already has an extension or is specific — use as-is
                 pattern.clone()
             };
-            let full_pattern = base_dir.join(&ext_pattern).to_string_lossy().to_string();
-            for entry in glob(&full_pattern).context("Invalid glob pattern")? {
-                if let Ok(path) = entry {
-                    if path.is_file()
-                        && is_supported_file(&path)
-                        && !is_excluded(&path, &config.excludes, base_dir)
-                    {
-                        files.push(path);
-                    }
-                }
+            include_builder.add(
+                Glob::new(&glob_pattern)
+                    .with_context(|| format!("Invalid include pattern: {}", glob_pattern))?,
+            );
+        }
+    }
+    let include_set = include_builder
+        .build()
+        .context("Failed to build include glob set")?;
+
+    let mut files = Vec::new();
+    let excludes = &config.excludes;
+
+    let walker = WalkDir::new(base_dir)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| {
+            // Skip excluded directories entirely (don't descend into them)
+            if entry.file_type().is_dir() {
+                let dir_name = entry.file_name().to_string_lossy();
+                return !excludes.iter().any(|ex| dir_name == *ex);
             }
+            true
+        });
+
+    for entry in walker {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        // Only process regular files
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path();
+
+        // Check supported extension
+        if !is_supported_file(path) {
+            continue;
+        }
+
+        // Check matches include pattern (relative to base_dir)
+        let rel_path = path.strip_prefix(base_dir).unwrap_or(path);
+        if include_set.is_match(rel_path) {
+            files.push(path.to_path_buf());
         }
     }
 
@@ -115,31 +152,6 @@ fn is_supported_file(path: &Path) -> bool {
         .and_then(|ext| ext.to_str())
         .map(|ext| SUPPORTED_EXTENSIONS.contains(&ext))
         .unwrap_or(false)
-}
-
-fn is_excluded(path: &Path, excludes: &[String], base_dir: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-
-    // Check if any path component matches an exclude pattern
-    for exclude in excludes {
-        // Direct component match (e.g. "node_modules" matches any path containing it)
-        if path_str.contains(&format!("/{}/", exclude))
-            || path_str.contains(&format!("{}{}",
-                base_dir.to_string_lossy(),
-                format!("/{}/", exclude)))
-        {
-            return true;
-        }
-
-        // Glob pattern match
-        let full_pattern = base_dir.join(exclude).to_string_lossy().to_string();
-        if let Ok(matches) = glob::Pattern::new(&full_pattern) {
-            if matches.matches_path(path) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 #[cfg(test)]
@@ -204,27 +216,4 @@ mod tests {
         assert!(config.excludes.contains(&"dist".to_string()));
     }
 
-    #[test]
-    fn test_is_excluded_node_modules() {
-        let base = Path::new("/project");
-        let excludes = vec!["node_modules".to_string()];
-        let path = Path::new("/project/node_modules/.pnpm/some-pkg/index.js");
-        assert!(is_excluded(path, &excludes, base));
-    }
-
-    #[test]
-    fn test_is_excluded_nested_node_modules() {
-        let base = Path::new("/project");
-        let excludes = vec!["node_modules".to_string()];
-        let path = Path::new("/project/packages/app/node_modules/pkg/index.ts");
-        assert!(is_excluded(path, &excludes, base));
-    }
-
-    #[test]
-    fn test_not_excluded_src() {
-        let base = Path::new("/project");
-        let excludes = vec!["node_modules".to_string()];
-        let path = Path::new("/project/src/app.ts");
-        assert!(!is_excluded(path, &excludes, base));
-    }
 }
