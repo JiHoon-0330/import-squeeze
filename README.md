@@ -50,6 +50,34 @@ import-squeeze --check
 import-squeeze --config path/to/biome.json
 ```
 
+### File Discovery
+
+When no files are passed as arguments, import-squeeze reads `biome.json` to determine which files to process.
+
+- Searches for `biome.json` (or `biome.jsonc`) from the current directory upward
+- Reads `files.include` patterns (e.g. `["src/**", "lib/**"]`)
+- Patterns prefixed with `!` are treated as excludes (e.g. `"!dist"`)
+- Only `.ts`, `.tsx`, `.js`, `.jsx` files are processed
+
+```jsonc
+// biome.json
+{
+  "files": {
+    "include": ["src/**", "!src/generated/**"]
+  }
+}
+```
+
+When files are passed directly (e.g. from lint-staged), biome.json is not read.
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--check` | Report files that need changes without modifying them. Exits with code 1 if any file needs squeezing. Useful for CI. |
+| `--write` | Modify files in place. This is the default behavior. |
+| `--config <path>` | Specify a custom path to `biome.json` instead of auto-detecting. |
+
 ## lint-staged
 
 ```json
@@ -60,6 +88,8 @@ import-squeeze --config path/to/biome.json
 }
 ```
 
+lint-staged passes changed files as arguments, so only staged files are processed — no full project scan.
+
 ## Supported Syntax
 
 - `import { x } from 'y'`
@@ -67,6 +97,8 @@ import-squeeze --config path/to/biome.json
 - `import './side-effect'`
 - `import.meta.glob(...)` (single & multiline)
 - Multiline imports with `{ ... }`
+
+Only ES `import` statements are handled. `require()` is not supported.
 
 ## How It Works
 
