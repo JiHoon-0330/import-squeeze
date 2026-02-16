@@ -1,6 +1,6 @@
 {
   "name": "import-squeeze",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fast CLI tool to remove blank lines between import statements",
   "license": "MIT",
   "bin": {
@@ -8,9 +8,9 @@
   },
   "files": ["bin.js"],
   "optionalDependencies": {
-    "@import-squeeze/darwin-arm64": "0.1.0",
-    "@import-squeeze/darwin-x64": "0.1.0",
-    "@import-squeeze/linux-x64": "0.1.0",
-    "@import-squeeze/win32-x64": "0.1.0"
+    "@import-squeeze/darwin-arm64": "0.1.1",
+    "@import-squeeze/darwin-x64": "0.1.1",
+    "@import-squeeze/linux-x64": "0.1.1",
+    "@import-squeeze/win32-x64": "0.1.1"
   }
 }
