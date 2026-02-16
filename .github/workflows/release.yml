@@ -63,10 +63,11 @@ jobs:
         with:
           path: artifacts
 
-      - name: Copy binaries to npm packages
+      - name: Copy binaries to npm packages and rename for release
         run: |
           for dir in darwin-arm64 linux-x64; do
             cp -r artifacts/$dir/* npm/$dir/
+            cp artifacts/$dir/import-squeeze artifacts/import-squeeze-$dir
           done
 
       - name: Publish platform packages
@@ -91,5 +92,5 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            artifacts/darwin-arm64/import-squeeze
-            artifacts/linux-x64/import-squeeze
+            artifacts/import-squeeze-darwin-arm64
+            artifacts/import-squeeze-linux-x64
