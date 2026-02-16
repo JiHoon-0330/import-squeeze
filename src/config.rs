@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 
 const SUPPORTED_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
 
+/// Directories that Biome ignores by default.
+const DEFAULT_IGNORE: &[&str] = &["node_modules", ".git"];
+
 #[derive(Debug)]
 pub struct BiomeFiles {
     pub includes: Vec<String>,
@@ -17,10 +20,15 @@ pub fn parse_biome_config(content: &str) -> Result<BiomeFiles> {
         serde_json::from_str(content).context("Failed to parse biome.json")?;
 
     let mut includes = Vec::new();
-    let mut excludes = Vec::new();
+    let mut excludes: Vec<String> = DEFAULT_IGNORE.iter().map(|s| s.to_string()).collect();
 
     if let Some(files) = json.get("files") {
-        if let Some(include_arr) = files.get("include").and_then(|v| v.as_array()) {
+        // Biome supports both "include" and "includes"
+        let include_arr = files
+            .get("includes")
+            .or_else(|| files.get("include"))
+            .and_then(|v| v.as_array());
+        if let Some(include_arr) = include_arr {
             for item in include_arr {
                 if let Some(s) = item.as_str() {
                     if let Some(stripped) = s.strip_prefix('!') {
@@ -28,6 +36,15 @@ pub fn parse_biome_config(content: &str) -> Result<BiomeFiles> {
                     } else {
                         includes.push(s.to_string());
                     }
+                }
+            }
+        }
+
+        // Biome uses "ignore" for exclude patterns
+        if let Some(ignore_arr) = files.get("ignore").and_then(|v| v.as_array()) {
+            for item in ignore_arr {
+                if let Some(s) = item.as_str() {
+                    excludes.push(s.to_string());
                 }
             }
         }
@@ -77,7 +94,9 @@ pub fn resolve_file_paths(config: &BiomeFiles, base_dir: &Path) -> Result<Vec<Pa
             let full_pattern = base_dir.join(&ext_pattern).to_string_lossy().to_string();
             for entry in glob(&full_pattern).context("Invalid glob pattern")? {
                 if let Ok(path) = entry {
-                    if is_supported_file(&path) && !is_excluded(&path, &config.excludes, base_dir)
+                    if path.is_file()
+                        && is_supported_file(&path)
+                        && !is_excluded(&path, &config.excludes, base_dir)
                     {
                         files.push(path);
                     }
@@ -99,8 +118,21 @@ fn is_supported_file(path: &Path) -> bool {
 }
 
 fn is_excluded(path: &Path, excludes: &[String], base_dir: &Path) -> bool {
-    for pattern in excludes {
-        let full_pattern = base_dir.join(pattern).to_string_lossy().to_string();
+    let path_str = path.to_string_lossy();
+
+    // Check if any path component matches an exclude pattern
+    for exclude in excludes {
+        // Direct component match (e.g. "node_modules" matches any path containing it)
+        if path_str.contains(&format!("/{}/", exclude))
+            || path_str.contains(&format!("{}{}",
+                base_dir.to_string_lossy(),
+                format!("/{}/", exclude)))
+        {
+            return true;
+        }
+
+        // Glob pattern match
+        let full_pattern = base_dir.join(exclude).to_string_lossy().to_string();
         if let Ok(matches) = glob::Pattern::new(&full_pattern) {
             if matches.matches_path(path) {
                 return true;
@@ -123,19 +155,24 @@ mod tests {
         }"#;
         let config = parse_biome_config(json).unwrap();
         assert_eq!(config.includes, vec!["src/**", "lib/**"]);
-        assert!(config.excludes.is_empty());
+        // Default ignores are always present
+        assert!(config.excludes.contains(&"node_modules".to_string()));
+        assert!(config.excludes.contains(&".git".to_string()));
     }
 
     #[test]
     fn test_parse_config_with_excludes() {
         let json = r#"{
             "files": {
-                "include": ["**", "!dist", "!node_modules"]
+                "include": ["**", "!dist"],
+                "ignore": ["build"]
             }
         }"#;
         let config = parse_biome_config(json).unwrap();
         assert_eq!(config.includes, vec!["**"]);
-        assert_eq!(config.excludes, vec!["dist", "node_modules"]);
+        assert!(config.excludes.contains(&"node_modules".to_string()));
+        assert!(config.excludes.contains(&"dist".to_string()));
+        assert!(config.excludes.contains(&"build".to_string()));
     }
 
     #[test]
@@ -145,7 +182,7 @@ mod tests {
         }"#;
         let config = parse_biome_config(json).unwrap();
         assert_eq!(config.includes, vec!["**"]);
-        assert!(config.excludes.is_empty());
+        assert!(config.excludes.contains(&"node_modules".to_string()));
     }
 
     #[test]
@@ -153,5 +190,41 @@ mod tests {
         let json = "{}";
         let config = parse_biome_config(json).unwrap();
         assert_eq!(config.includes, vec!["**"]);
+    }
+
+    #[test]
+    fn test_parse_config_with_includes_plural() {
+        let json = r#"{
+            "files": {
+                "includes": ["**", "!dist"]
+            }
+        }"#;
+        let config = parse_biome_config(json).unwrap();
+        assert_eq!(config.includes, vec!["**"]);
+        assert!(config.excludes.contains(&"dist".to_string()));
+    }
+
+    #[test]
+    fn test_is_excluded_node_modules() {
+        let base = Path::new("/project");
+        let excludes = vec!["node_modules".to_string()];
+        let path = Path::new("/project/node_modules/.pnpm/some-pkg/index.js");
+        assert!(is_excluded(path, &excludes, base));
+    }
+
+    #[test]
+    fn test_is_excluded_nested_node_modules() {
+        let base = Path::new("/project");
+        let excludes = vec!["node_modules".to_string()];
+        let path = Path::new("/project/packages/app/node_modules/pkg/index.ts");
+        assert!(is_excluded(path, &excludes, base));
+    }
+
+    #[test]
+    fn test_not_excluded_src() {
+        let base = Path::new("/project");
+        let excludes = vec!["node_modules".to_string()];
+        let path = Path::new("/project/src/app.ts");
+        assert!(!is_excluded(path, &excludes, base));
     }
 }
